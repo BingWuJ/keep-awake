@@ -1,0 +1,14 @@
+=== Test: on super ===
+Time: 2026-06-22 11:22:19
+Command: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\keep-awake.ps1 on super
+Exit code: 0
+Output:
+    Strong ON. Present & zeroed: STANDBYIDLE, HIBERNATEIDLE. NOT present (skipped, logged): LIDACTION, UNATTENDSLEEP.
+  🛡️ SUPER: 永不睡眠（合盖/拔外屏/电池），直到运行 'off'。
+     ⚠️ 合盖无外屏时持续高负载会发热；电池下也不睡。用完务必 off。
+STANDBY after on super:
+  当前交流电源设置索引: 0x00000000
+  当前直流电源设置索引: 0x00000000
+strong flag exists: True
+backup exists: True
+

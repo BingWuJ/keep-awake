@@ -1,0 +1,14 @@
+=== Test: off ===
+Time: 2026-06-22 11:22:28
+Command: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\keep-awake.ps1 off
+Exit code: 0
+Output:
+    off complete. Restored: STANDBYIDLE, HIBERNATEIDLE.
+  🌙 已停止。恢复正常睡眠行为。
+STANDBY after off:
+  当前交流电源设置索引: 0x0000012c
+  当前直流电源设置索引: 0x000000b4
+backup exists: False
+strong flag exists: False
+mode exists: False
+

@@ -1,10 +1,10 @@
-# macOS
-.DS_Store
-
-# Python
-__pycache__/
-*.pyc
-
 # Runtime state / logs (created at use time, never committed)
 .keep-awake/
 *.log
+
+# Windows / PowerShell
+*.tmp
+*~
+
+# pi harness metadata
+.pi/
