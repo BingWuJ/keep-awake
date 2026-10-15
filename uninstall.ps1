@@ -1,53 +1,57 @@
 ﻿#!/usr/bin/env pwsh
-# uninstall.ps1 - Completely remove keep-awake (Windows).
+# uninstall.ps1 - Remove keep-awake (Windows) and any leftovers of the old design.
 #
-# Stops any active protection, removes the flex-mode hooks, deletes the
-# keep-awake-strong scheduled task, and clears runtime state. Does NOT delete
-# this repository; run it from the repo directory.
+# Steps: run 'off' (stops the daemon; cleans legacy tasks / power backup / hooks - UAC is
+# requested only when such old leftovers exist), then verify nothing is left, then delete
+# the state directory.
 
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
 
-$RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $KeepAwake = Join-Path $RepoDir 'scripts\keep-awake.ps1'
 
-function Test-Command { param([string]$Name) [bool](Get-Command $Name -ErrorAction SilentlyContinue) }
-
-if (-not (Test-Path $KeepAwake)) { throw "脚本未找到: $KeepAwake" }
-$shell = if (Test-Command pwsh) { (Get-Command pwsh).Source } else { 'powershell.exe' }
-
-$StateDir = Join-Path $env:USERPROFILE '.keep-awake'
-
-Write-Host "→ 停止任何活动中的 keep-awake 防护并恢复电源计划…" -ForegroundColor Cyan
-$offOutput = & $shell -NoProfile -ExecutionPolicy Bypass -File $KeepAwake off 2>&1
-$offExit = $LASTEXITCODE
-$offOutput | ForEach-Object { Write-Host "  $_" }
-if ($offExit -ne 0) {
-    Write-Host "❌ off 命令失败（退出码 $offExit）。卸载中止，保留状态目录以便排查/手动 restore。" -ForegroundColor Red
+if (-not (Test-Path -LiteralPath $KeepAwake -PathType Leaf)) {
+    Write-Host "⚠ 未找到 $KeepAwake，无法确认守护进程与旧版残留已清理；保留状态目录。请恢复脚本后重试。" -ForegroundColor Yellow
     exit 1
 }
 
-# Only remove backup/state after confirming strong-op has removed the backup itself.
-if (Test-Path "$StateDir\power-backup.json") {
-    Write-Host "⚠️  电源备份文件仍存在，说明恢复可能未成功。卸载中止。" -ForegroundColor Yellow
-    Write-Host "   请手动检查电源计划，然后删除 $StateDir" -ForegroundColor Yellow
+Write-Host "→ 停止 keep-awake 并清理…" -ForegroundColor Cyan
+try {
+    & pwsh -NoProfile -ExecutionPolicy Bypass -File $KeepAwake off
+    if ($LASTEXITCODE -ne 0) { throw "off 退出码为 $LASTEXITCODE" }
+} catch {
+    Write-Host "⚠ off 失败：$($_.Exception.Message)。未继续删除状态目录，请排除错误后重试。" -ForegroundColor Yellow
     exit 1
 }
 
-Write-Host "→ 移除 flex 模式 hooks…" -ForegroundColor Cyan
-& $shell -NoProfile -ExecutionPolicy Bypass -File $KeepAwake uninstall-hook 2>&1 | ForEach-Object { Write-Host "  $_" }
+# ---- Verify legacy tasks are gone -------------------------------------------
+$leftover = @()
+foreach ($t in @('keep-awake-strong','keep-awake-bootcheck')) {
+    $null = schtasks /query /tn $t 2>$null
+    if ($LASTEXITCODE -eq 0) { $leftover += "计划任务 $t" }
+}
 
-Write-Host "→ 移除 keep-awake 计划任务（会弹一次 UAC）…" -ForegroundColor Cyan
-& $shell -NoProfile -ExecutionPolicy Bypass -File $KeepAwake uninstall-task 2>&1 | ForEach-Object { Write-Host "  $_" }
+if ($leftover.Count -gt 0) {
+    Write-Host ""
+    Write-Host "⚠ 以下旧版计划任务未能删除（需要管理员权限）: $($leftover -join ', ')" -ForegroundColor Yellow
+    Write-Host "  已保留状态目录与备份，请以管理员身份再次运行本脚本。" -ForegroundColor Yellow
+    exit 1
+}
 
-if (Test-Path $StateDir) {
-    Write-Host "→ 清理运行时状态目录…" -ForegroundColor Cyan
-    Remove-Item -Path $StateDir -Recurse -Force -ErrorAction SilentlyContinue
+# ---- Remove the state directory only after cleanup and task verification ------
+$state = Join-Path $env:USERPROFILE '.keep-awake'
+try {
+    if (Test-Path -LiteralPath $state) {
+        Remove-Item -LiteralPath $state -Recurse -Force -ErrorAction Stop
+    }
+    if (Test-Path -LiteralPath $state) { throw "状态目录仍存在: $state" }
+} catch {
+    Write-Host "⚠ 状态目录清理失败：$($_.Exception.Message)。卸载未完成，请排除占用或权限问题后重试。" -ForegroundColor Yellow
+    exit 1
 }
 
 Write-Host ""
-Write-Host "✅ keep-awake 已从本机移除。" -ForegroundColor Green
-Write-Host "   如需重新安装，运行: install.ps1" -ForegroundColor Gray
-Write-Host "   仓库目录 ($RepoDir) 不会被删除。" -ForegroundColor Gray
+Write-Host "✅ keep-awake 已卸载：守护进程、状态目录、旧版任务与备份均已清理。" -ForegroundColor Green

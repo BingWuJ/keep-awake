@@ -1,127 +1,93 @@
-# keep-awake — 让 Windows 11 不休眠
+# keep-awake — 让 Windows 11 在长任务时保持唤醒
 
-[![平台: Windows 11](https://img.shields.io/badge/platform-Windows%2011-blue)](#系统要求与兼容性)
-[![PowerShell](https://img.shields.io/badge/built%20with-PowerShell-5391FE)](#系统要求与兼容性)
+[![平台: Windows 11](https://img.shields.io/badge/platform-Windows%2011-blue)](#平台)
+[![PowerShell](https://img.shields.io/badge/built%20with-PowerShell-5391FE)](#平台)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**跑长任务时让 Windows 11 不息屏、不睡眠、不休眠** —— 保持屏幕常亮、防止系统休眠，还可以选择**合盖也不休眠**（笔记本）。一个开源的 **Windows 防休眠神器**，专为 **让 AI Agent / 自动化工具无人值守地持续运行** 而做。
+**插电跑长任务时，挡住系统空闲睡眠；屏幕允许自己变黑；正常运行不改合盖、电源键或电源计划（旧版恢复是唯一例外）。**
+一个纯 PowerShell 的 Windows 防睡眠小工具，专为让 AI Agent / 自动化任务无人值守地跑完而做。
 
 ---
 
-## 为什么需要它
+## 它做什么 / 不做什么（诚实清单）
 
-当你启动一个长任务 —— **AI Agent / Claude Code / Claude Code Connectors** 跑批、模型下载、视频渲染、项目构建、数据同步 —— 然后离开电脑，Windows 会息屏、睡眠，你的任务也跟着卡住。`keep-awake` 会在你需要的时间内一直摁住系统的睡眠开关，用完自动让开。
+**做：**
 
-它就是为 **"我离开时让 AI 接着干活"** 这个场景做的，分三档强度，纯命令行操作。
+- 🔌 **插电时**通过 `SetThreadExecutionState` 请求阻止系统空闲睡眠，减少下载、渲染、AI Agent 跑批因空闲睡眠中断；不保证覆盖手动睡眠或系统/固件限制。
+- 🪫 **拔电后在下一次电源轮询时放开**（约 5 秒内），Windows 正常睡眠计时接管；插回电源自动继续挡。电池上绝不硬撑。
+- ❓ 电源状态读不到时：**不挡，并如实报告**，绝不假装在挡。
+- 🖥️ 不阻止屏幕按 Windows 自己的「关闭显示器」超时**自行变黑**；其他程序仍可能影响显示超时。
 
-## 功能特性
+**不做：**
 
-- 🔆 防止**息屏**、**空闲睡眠**、**磁盘睡眠**和空闲触发的**系统睡眠**；super/flex 还额外挡住合盖/电池睡眠。
-- 🛡️ 可选的**「合盖也不休眠」** —— 合上盖子、拔掉外接屏、甚至用电池，都继续运行。
-- 🎛️ **三种命名模式**（超级 / 灵活 / 普通）应对不同需求。
-- ⚡ **灵活档自动循环**：**只在 Agent 干活时**唤醒，停下自动放开（靠 pi / Claude Code 钩子）。省电。
-- 🧩 **可作为 Claude Code / pi Skill**（`SKILL.md`）—— AI Agent 能按意图驱动。
-- 🪶 纯 PowerShell + 系统自带 API（`SetThreadExecutionState`、`powercfg`）。没有常驻后台服务，不装内核扩展。
+- ❌ 正常防睡眠不改电源计划、不调用 `powercfg`；仅清理旧版备份时例外恢复旧设置。
+- ❌ 正常使用无需管理员、不注册计划任务、不弹 UAC；仅清理旧版任务/备份/strong 文件可能请求提权。
+- ❌ 不强制屏幕常亮，不碰显示器空闲计时。
+- ❌ 正常运行不改合盖动作、电源按钮行为；旧版恢复可能还原旧合盖设置。
+- ❌ 不安装钩子、不创建 pi / Claude Code 的 `settings.json`；`off` 仅可能移除已有文件中的旧版 keep-awake 钩子。
+- ❌ 重启后不自动恢复——需要重新 `on`。
 
-## 三种模式
-
-| 模式 | 作用 | 合盖时 | 需授权 |
-|------|------|--------|--------|
-| **普通 normal** | 开盖时不息屏 / 不空闲睡 | 合盖即睡 | 否 |
-| **灵活 flex** ⭐ | **只在 Agent 干活时**唤醒，停下自动放开 | 干活时不睡 | 是（计划任务免密） |
-| **超级 super** | 一直不睡，直到你停 —— 合盖 / 拔外屏 / 电池都不睡 | 不睡 | 是（计划任务免密） |
-
-⭐ 日常推荐 **灵活档**：干活时全防护，闲下来自动省电。
-
-## 系统要求与兼容性
-
-- **仅支持 Windows 11**（依赖 `SetThreadExecutionState` 和 `powercfg`）。Windows 10 未测试，可能工作但不保证。
-- **PowerShell 7 (pwsh.exe)** 推荐；Windows PowerShell 5.1 也能跑核心脚本，但计划任务内脚本需要 pwsh 环境。
-- **核心命令行**（`scripts/keep-awake.ps1`）：无需额外依赖。
-- **「合盖也不休眠」**：需要**一次性 UAC 授权**（见下文），因为它要切换系统电源设置（`powercfg`）。
-- **灵活档自动循环**和**状态行**是**可选的 pi / Claude Code 集成**（用到 hooks / `statusLine`）。没有 pi/Claude Code 时，超级档和普通档照常可用，灵活档也能手动 arm/disarm。
-- ⚠️ **带合盖的现代待机（S0 Modern Standby）笔记本**：本工具通过 `powercfg` 改 standby/hibernate timeout 来防止睡眠；部分 S0 设备的合盖行为由固件/驱动控制，`Lid close action` 设置可能不存在，脚本会诚实跳过该设置（never fake）。
-
-## 安装
-
-```powershell
-git clone https://github.com/aurthur/keep-awake.git
-cd keep-awake
-.\install.ps1
-```
-
-`install.ps1` 会：
-
-1. 检查核心脚本语法；
-2. 注册一个**最高权限计划任务** `keep-awake-strong`（弹一次 UAC，此后免密）；
-3. 安装 flex 模式钩子到 `~/.pi/agent/settings.json` 和 `~/.claude/settings.json`。
-
-核心命令行无需安装、即装即用：
-
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 on flex
-```
+> 这份取舍来自一次对旧设计（super/flex 三档 + 最高权限计划任务 + 合盖防护）的逐条盘问。
+> 结论：合盖不休眠和强制亮屏用不上，却要付出持久管理员入口的代价，全部砍掉。
 
 ## 使用
 
-### 命令行
+无需安装，无需管理员：
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 on normal      # 开盖不睡（合盖就睡）
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 on flex        # 干活时不睡，闲下来自动放开
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 on super       # 一直不睡（合盖/拔电/电池）直到 off
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 status         # 查看当前状态
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 off            # 全部停止，恢复正常睡眠
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 off --sleep-now # 停止并立即睡眠（待机/standby）
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 restore        # 手动恢复电源计划（应急）
+# 开：插电时挡住系统空闲睡眠（电池上不挡，会如实提示）
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 on
+
+# 查：当前状态（含电源、屏幕、旧版残留检测）
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 status
+
+# 关：停止，恢复正常睡眠
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 off
 ```
 
-### pi / Claude Code Skill
+作为 pi / Claude Code 的 Skill：把本仓库放进 skill 路径（或软链），`SKILL.md` 会让 Agent 在长任务开始时 `on`、结束时 `off`。没有 Agent 时手动跑同样有效。
 
-把仓库放到 `~/.claude/skills/keep-awake/`（或软链），或在 pi 的 skill 路径中引用，`SKILL.md` 会告诉 Agent 何时触发、用什么命令。
+## 实现原理
 
-`on flex` 还会自动安装 pi / Claude Code 钩子：
+一根杠杆 + 电源监视，全部无提权：
 
-- `UserPromptSubmit → arm`（你发消息时唤醒）
-- `Stop → disarm`（Agent 停下时放开）
+1. **`SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`** —— 由隐藏守护进程 `awake-watcher.ps1` 持有，只挡系统空闲睡眠。每 60 秒重新申明，每 5 秒查一次电源状态；按轮询结果释放、续挡或标记错误。
+2. **状态透明** —— 守护进程把状态写进 `%USERPROFILE%\.keep-awake\`（`watcher-state`）；CLI 与状态行读取该状态并核实进程归属。`status` 还读取电源来源和检测旧任务，首次运行 CLI 会创建状态目录。状态行不写文件、不读 stdin。
 
-### 状态行（可选）
+新版不设置 `ES_DISPLAY_REQUIRED`、不注册任务、不安装 hooks。旧版恢复/移除是唯一的电源计划和已有钩子清理例外。手动睡眠、合盖和电源键仍按 Windows 设置执行；Modern Standby 的实际功耗依赖系统与固件，不保证所有任务永不中断。
 
-在 pi / Claude Code 的 `settings.json` 里添加：
+## 安装（可选）
+
+```powershell
+.\install.ps1
+```
+
+只做两件事：核心脚本语法检查、旧版残留检测。不注册任何任务。
+
+## 状态行（可选）
+
+以下是 **Claude Code** 的可选手动配置，不会由本工具写入。合并到 `~/.claude/settings.json`，不要覆盖已有配置；替换成实际仓库路径，路径含空格时保留引号（参见 [官方状态行文档](https://code.claude.com/docs/en/statusline)）。pi 原生 settings 没有此 `statusLine` 字段，不要把此示例复制到 pi。
 
 ```json
 {
   "statusLine": {
     "type": "command",
-    "command": "pwsh -NoProfile -File E:\\\\keep-awake\\\\scripts\\\\statusline.ps1"
+    "command": "pwsh -NoProfile -File \"E:/keep-awake/scripts/statusline.ps1\""
   }
 }
 ```
 
-它会在状态栏显示当前 keep-awake 状态（如 `● Awake (Super)` 或 `○ Sleep OK`）。
+显示 `● Awake (AC)` / `◐ Awake idle (battery - not held)` / `⚠` 错误或残留状态 / `○ Sleep OK`。可单独运行 `pwsh -NoProfile -File .\scripts\statusline.ps1` 查看。
 
-## 「合盖也不休眠」—— 一次性授权
+## 从旧版升级
 
-合盖防护要切换系统电源设置（`powercfg`），需要管理员权限。为了不用每次弹 UAC，你只需**一次性**授权注册一个**最高权限计划任务**。`install.ps1` 已经帮你做了这一步。
+旧版（super/flex）通过最高权限计划任务修改过电源计划。新版 `off` 或 `uninstall.ps1` 会一次性清理：
 
-如果你跳过了安装，可以之后单独运行：
+- 按备份恢复电源计划；
+- 删除 `keep-awake-strong`、`keep-awake-bootcheck` 计划任务；检测到旧任务、备份或 strong 残留文件时才可能请求一次 UAC；
+- 移除已有 pi / Claude Code settings.json 中可识别的旧版 keep-awake `arm`/`disarm` 钩子；仅有钩子不会触发 UAC。
 
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 install-task
-```
-
-这会弹一次 UAC，注册 `keep-awake-strong` 任务。此后 super/flex 的合盖防护免密生效。
-
-**安全说明**：该任务只执行 `scripts/strong-op.ps1`（备份/改/恢复电源计划），不做其他任何事。随时可撤销：`pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 uninstall-task` 或运行 `uninstall.ps1`。
-
-## 实现原理
-
-两根系统「杠杆」：
-
-1. **`SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)`** —— 由 `awake-watcher.ps1` 守护进程持有，阻止息屏、空闲、磁盘、系统睡眠。无需权限。但**挡不住合盖睡眠**和**睡眠恢复后标志丢失**（PowerToys bug #32544），所以守护进程每 60 秒重新 assert，并配合单实例 Mutex + try/finally 显式清标志。
-2. **`powercfg`** —— 改 `standby/hibernate timeout` 为 0（以及 `Lid close action` 为「不操作」，如果设备支持），挡住**一切**睡眠，含合盖 / 电池。通过 `keep-awake-strong` 计划任务以管理员身份执行，普通调用免密。
-
-三种模式只是不同组合：`normal` = 杠杆①；`super` = 杠杆①+② 常开；`flex` = 杠杆①+② 仅在 Agent 干活时开（由 hooks 控制）。状态存在 `~/.keep-awake/`。
+备份损坏、恢复失败或取消 UAC 时，`off` / 卸载返回非零并保留旧残留。请先处理错误，勿直接删除备份。
 
 ## 卸载
 
@@ -129,15 +95,19 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 install-t
 .\uninstall.ps1
 ```
 
-这会停止防护、删除计划任务、移除 hooks、清理状态目录。如果之前用 `install-task` 单独注册的任务也会被删除。
+停止守护进程、清理旧版残留、核验旧任务已删后，才删除 `%USERPROFILE%\.keep-awake\` 状态目录。缺少核心脚本、`off` 失败、旧任务仍在或目录删不掉时返回非零，不报卸载成功；先修复错误再重试。用户手动配置的 `statusLine` 不会被卸载脚本移除，需要自行移除或合并。
+
+## 平台
+
+- 仅支持 Windows 11（含 S0 现代待机设备）。
+- 本文命令和安装/卸载脚本要求 PowerShell 7（`pwsh`）在 PATH 中；不承诺纯 Windows PowerShell 5.1 环境的完整流程。
+- 非 Windows 系统不支持。
 
 ## 关键词
 
-防休眠 · 防止系统休眠 · 防止电脑睡眠 · 让电脑不休眠 · 保持唤醒 · 保持清醒 · 显示屏常亮 · 屏幕常亮 ·
-合盖不休眠 · 合盖不息屏 · 合盖也不睡 · 夹合模式 · 笔记本合盖继续运行 · 电池防休眠 · 挂机不休眠 ·
-不息屏 · 防锁屏 · Windows 防休眠 · SetThreadExecutionState · powercfg ·
-让 AI 持续运行 · AI Agent 防休眠 · Claude Code 防休眠 · Claude Code Connectors 不休眠 ·
-自动化挂机不睡 · keep windows awake · prevent sleep · never sleep · keep awake with lid closed
+防休眠 · 防止电脑睡眠 · 保持唤醒 · 挂机不休眠 · 防止 AI 任务被睡眠打断 ·
+SetThreadExecutionState · keep windows awake · prevent sleep · keep awake ·
+AI Agent 防休眠 · Claude Code 防休眠 · unattended · no admin · no scheduled task
 
 ## 许可证
 
