@@ -75,10 +75,10 @@ $install = Join-Path $dir 'install.ps1'
 if ($isAgent) { & $install *> $null } else { & $install }
 
 if ($isAgent) {
-    # 单行、ASCII，便于 Agent 解析；顺手清掉子进程留下的 LASTEXITCODE
+    # 单行、ASCII，便于 Agent 解析；顺手清掉子进程留下的 LASTEXITCODE。
+    # 不调用 exit：用户可能把这条命令粘进已有会话，退出整个会话太粗暴。
     $global:LASTEXITCODE = 0
     Write-Output "READY $dir"
-    exit 0
 }
 else {
     Write-Host ''
