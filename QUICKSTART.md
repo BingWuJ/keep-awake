@@ -2,6 +2,14 @@
 
 > 一句话：插电跑长任务时，请求阻止系统空闲睡眠；屏幕可以自己黑；正常运行不改合盖/电源计划，旧版恢复除外。
 
+还没装？PowerShell 7 里一行搞定：
+
+```powershell
+irm https://raw.githubusercontent.com/BingWuJ/keep-awake/main/setup.ps1 | iex
+```
+
+装到 `%LOCALAPPDATA%\Programs\keep-awake`，不需要管理员。下面是手动用法与契约细节。
+
 ---
 
 ## 1. 使用（正常使用无需安装、无需管理员）

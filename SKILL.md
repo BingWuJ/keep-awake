@@ -42,6 +42,10 @@ description: >-
 
 Use an absolute path to the script when calling from another directory.
 
+Not installed yet? Run the agent one-liner from the README ("install in one line"):
+`$env:KEEP_AWAKE_AGENT=1; irm https://raw.githubusercontent.com/BingWuJ/keep-awake/main/setup.ps1 | iex`
+It prints `READY <dir>` and exits 0 on success; then call `<dir>\scripts\keep-awake.ps1`.
+
 ## Hard rules
 
 - Run `on` when the user asks for no-sleep during a long unattended task; run `off` as
