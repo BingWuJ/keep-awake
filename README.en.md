@@ -1,37 +1,43 @@
-# keep-awake — keep Windows 11 awake during long tasks
+# keep-awake
+
+**Don't let Windows 11 fall asleep in the middle of a long run.**
+
+On AC power it blocks system idle sleep so AI agents and batch jobs finish; unplug and it lets go immediately, and the screen still turns off on its own schedule. One PowerShell script: no admin, no scheduled task, no power-plan changes.
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 on
+```
 
 [![Platform: Windows 11](https://img.shields.io/badge/platform-Windows%2011-blue)](#platform)
 [![PowerShell](https://img.shields.io/badge/built%20with-PowerShell-5391FE)](#platform)
 [![license: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**While plugged in, requests prevention of system idle sleep during long tasks and lets the screen turn off. Normal operation leaves lid, power-button, and power-plan settings unchanged; legacy restoration is the only exception.**
-A pure-PowerShell Windows anti-sleep tool built for unattended AI agents and long runs.
+## Why you need it
 
----
+An agent is halfway through a job, the idle timer fires, the machine sleeps, and you come back to half a result and a dead terminal. The usual workaround is setting the display timeout to "Never" and leaving the monitor lit all night.
 
-## What it does / does not do (honest list)
+keep-awake does one thing: **while plugged in, it tells Windows "don't sleep because you're idle."** The screen turns off whenever it normally would — no extra power draw, no burn-in.
 
-**Does:**
+## What it does
 
-- 🔌 While **on AC power**, requests prevention of system idle sleep (`SetThreadExecutionState`) for downloads, renders, and AI agent runs. It does not override manual sleep or OS/firmware restrictions.
-- 🪫 **Unplug → releases on the next power poll** (roughly within 5 seconds). Windows' normal sleep timers take over; plug back in and it holds again. It never holds on battery.
-- ❓ If the power state cannot be read: **holds nothing and says so.** Never fakes.
-- 🖥️ It does not prevent the Windows **display timeout** from turning off the screen. Other applications may still affect that timeout.
+- 🔌 **Blocks system idle sleep on AC power** (`SetThreadExecutionState`), so downloads, renders, and agent runs are not cut off mid-way.
+- 🪫 **Releases on unplug** at the next power poll (roughly within 5 seconds); Windows' normal sleep timers take over. Plug back in and it holds again.
+- ❓ **Holds nothing when the power state cannot be read** — and says so. It never fakes being awake.
+- 🖥️ **Lets the screen turn off** on the Windows display timeout; it never touches the display idle timer.
 
-**Does not:**
+## What it does not do
 
-- ❌ No power plan changes or `powercfg` calls during normal operation; restoring an old version's backup is the only exception.
-- ❌ No admin rights or UAC during normal operation, and no task registration. Legacy task/backup/strong-file cleanup may request elevation.
-- ❌ No forced display-on; never touches the display idle timer.
-- ❌ Normal operation does not change lid-close or power-button behavior; legacy restoration may restore an old lid setting.
-- ❌ Never installs hooks or creates pi / Claude Code `settings.json`. `off` may remove recognized old keep-awake hooks from existing settings files.
+- ❌ No forced display-on.
+- ❌ No changes to lid close, the power button, or the power plan; normal operation never calls `powercfg`.
+- ❌ No admin rights, no scheduled tasks, no UAC prompts, no hooks.
 - ❌ Does not survive a reboot — run `on` again.
+- ❌ Does not override manual sleep, and does not guarantee uninterrupted execution under Modern Standby.
 
 > These trade-offs come from a decision-by-decision grilling of the old design (super/flex
 > modes + a highest-privilege scheduled task + lid-close protection). Conclusion: the lid
 > and forced-display features were not worth a persistent admin entry point. All removed.
 
-## Usage
+## Three commands
 
 No installation, no admin required:
 
@@ -46,8 +52,16 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 status
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\keep-awake.ps1 off
 ```
 
+`status` verifies daemon process ownership and detects legacy leftovers. The status line writes no files and does not read stdin.
+
+## Wiring it into an agent
+
 As a pi / Claude Code skill: place this repo in the skill path (or symlink it). `SKILL.md`
-tells the agent to run `on` when a long unattended task starts and `off` when it ends.
+tells the agent to run `on` when a long unattended task starts and `off` when it ends. Running
+the commands by hand works just as well without an agent.
+
+This is a **shared switch**, not per-agent reference counting: `off` releases it for every task
+using the same state.
 
 ## How it works
 
@@ -60,7 +74,7 @@ One lever plus power monitoring, all without elevation:
 2. **Transparent state** — the daemon publishes `watcher-state` under
    `%USERPROFILE%\.keep-awake\`. The CLI and status line read it and verify process ownership.
    `status` also reads the power source and queries legacy tasks; the CLI creates its state
-   directory if absent. The status line writes no files and does not read stdin.
+   directory if absent.
 
 The new design never sets `ES_DISPLAY_REQUIRED`, registers tasks, or installs hooks.
 Restoring/removing legacy artifacts is the only power-plan and existing-hook exception.
@@ -126,6 +140,11 @@ A manually configured `statusLine` is not removed; remove or merge it yourself.
 - Commands in this guide and the install/uninstall scripts require PowerShell 7 (`pwsh`)
   on PATH. The complete workflow is not guaranteed in a Windows PowerShell 5.1-only environment.
 - Non-Windows systems are unsupported.
+
+## Keywords
+
+keep windows awake · prevent sleep · stop windows sleeping · stay awake · unattended ·
+AI agent · SetThreadExecutionState · no admin · no scheduled task · Windows 11 · PowerShell
 
 ## License
 
